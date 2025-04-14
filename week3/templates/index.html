@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes-like Cluster Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #nodeList {
+            margin-top: 20px;
+        }
+        .node-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .healthy {
+            border-left: 5px solid #4CAF50;
+        }
+        .unhealthy {
+            border-left: 5px solid #f44336;
+        }
+        .unknown {
+            border-left: 5px solid #ff9800;
+        }
+        .pod-tag {
+            display: inline-block;
+            background-color: #e1f5fe;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-right: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kubernetes-like Cluster Manager</h1>
+        
+        <div class="section">
+            <h2>Add Node</h2>
+            <div class="form-group">
+                <label for="nodeId">Node ID:</label>
+                <input type="text" id="nodeId" placeholder="Enter node ID">
+            </div>
+            <div class="form-group">
+                <label for="cpuCapacity">CPU Capacity:</label>
+                <input type="number" id="cpuCapacity" placeholder="CPU capacity" value="100">
+            </div>
+            <button onclick="addNode()">Add Node</button>
+        </div>
+        
+        <div class="section">
+            <h2>Schedule Pod</h2>
+            <div class="form-group">
+                <label for="podId">Pod ID:</label>
+                <input type="text" id="podId" placeholder="Enter pod ID">
+            </div>
+            <div class="form-group">
+                <label for="cpuRequest">CPU Request:</label>
+                <input type="number" id="cpuRequest" placeholder="CPU request" value="10">
+            </div>
+            <button onclick="schedulePod()">Schedule Pod</button>
+        </div>
+        
+        <div class="section">
+            <h2>Cluster Status</h2>
+            <button onclick="refreshNodeList()">Refresh Node List</button>
+            <div id="nodeList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Function to add a node
+        function addNode() {
+            const nodeId = document.getElementById('nodeId').value;
+            const cpuCapacity = document.getElementById('cpuCapacity').value;
+            
+            if (!nodeId) {
+                alert('Please enter a node ID');
+                return;
+            }
+            
+            fetch('/add_node', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    node_id: nodeId,
+                    cpu_capacity: parseInt(cpuCapacity)
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    alert('Success: ' + data.message);
+                    refreshNodeList();
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+        
+        // Function to schedule a pod
+        function schedulePod() {
+            const podId = document.getElementById('podId').value;
+            const cpuRequest = document.getElementById('cpuRequest').value;
+            
+            if (!podId) {
+                alert('Please enter a pod ID');
+                return;
+            }
+            
+            fetch('/schedule_pod', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    pod_id: podId,
+                    cpu_request: parseInt(cpuRequest)
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    alert('Success: ' + data.message);
+                    refreshNodeList();
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+        
+        // Function to refresh node list
+        function refreshNodeList() {
+            fetch('/list_nodes')
+            .then(response => response.json())
+            .then(data => {
+                const nodeListElement = document.getElementById('nodeList');
+                nodeListElement.innerHTML = '';
+                
+                if (Object.keys(data).length === 0) {
+                    nodeListElement.innerHTML = '<p>No nodes found in the cluster.</p>';
+                    return;
+                }
+                
+                for (const [nodeId, nodeInfo] of Object.entries(data)) {
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = `node-item ${nodeInfo.health.toLowerCase()}`;
+                    
+                    const healthStatusSymbol = nodeInfo.health === 'Healthy' ? '✓' : '✗';
+                    
+                    nodeElement.innerHTML = `
+                        <h3>${nodeId} [${healthStatusSymbol} ${nodeInfo.health}]</h3>
+                        <p>Container ID: ${nodeInfo.container_id.substring(0, 12)}</p>
+                        <p>CPU Capacity: ${nodeInfo.cpu_capacity}</p>
+                        <p>CPU Available: ${nodeInfo.cpu_available}</p>
+                        <p>Pods: ${nodeInfo.pods.length ? '' : 'None'}</p>
+                        <div>
+                            ${nodeInfo.pods.map(pod => `<span class="pod-tag">${pod}</span>`).join('')}
+                        </div>
+                    `;
+                    
+                    nodeListElement.appendChild(nodeElement);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('nodeList').innerHTML = '<p>Error fetching node list.</p>';
+            });
+        }
+        
+        // Initial load of node list
+        document.addEventListener('DOMContentLoaded', refreshNodeList);
+    </script>
+</body>
+</html>
